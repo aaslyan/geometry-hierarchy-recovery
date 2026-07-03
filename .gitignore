@@ -1,0 +1,15 @@
+/build/
+*.o
+*.a
+# Rendered demo output (regenerate with ./build/demo)
+*.png
+.DS_Store
+.venv/
+*.gds
+flat_gds.txt
+paper/*.aux
+paper/*.log
+paper/*.aux
+paper/*.log
+# generated demo renders (regenerate via ./build/demo, hr_demo, gds_recover)
+/*.svg

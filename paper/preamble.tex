@@ -1,0 +1,40 @@
+% Preamble injected into the pandoc LaTeX build (see scripts/build_paper.sh).
+% Two jobs: (1) render inline Unicode math symbols correctly under XeTeX/tectonic
+% by mapping each to its LaTeX math form; (2) keep wide tables from overflowing.
+
+\usepackage{newunicodechar}
+% --- math relations / operators ---
+\newunicodechar{×}{\ensuremath{\times}}
+\newunicodechar{·}{\ensuremath{\cdot}}
+\newunicodechar{−}{\ensuremath{-}}
+\newunicodechar{≤}{\ensuremath{\le}}
+\newunicodechar{≥}{\ensuremath{\ge}}
+\newunicodechar{≈}{\ensuremath{\approx}}
+\newunicodechar{≫}{\ensuremath{\gg}}
+\newunicodechar{∩}{\ensuremath{\cap}}
+\newunicodechar{⋃}{\ensuremath{\bigcup}}
+\newunicodechar{⊆}{\ensuremath{\subseteq}}
+\newunicodechar{Σ}{\ensuremath{\Sigma}}
+\newunicodechar{→}{\ensuremath{\rightarrow}}
+% --- greek ---
+\newunicodechar{φ}{\ensuremath{\varphi}}
+\newunicodechar{ψ}{\ensuremath{\psi}}
+\newunicodechar{ε}{\ensuremath{\varepsilon}}
+\newunicodechar{µ}{\ensuremath{\mu}}
+% --- sub/superscripts that appear inline ---
+\newunicodechar{²}{\textsuperscript{2}}
+\newunicodechar{ᵢ}{\textsubscript{i}}
+\newunicodechar{ⱼ}{\textsubscript{j}}
+\newunicodechar{₁}{\textsubscript{1}}
+\newunicodechar{ₖ}{\textsubscript{k}}
+\newunicodechar{ₘ}{\textsubscript{m}}
+
+% --- diagrams ---
+\usepackage{tikz}
+\usetikzlibrary{positioning, arrows.meta, fit, backgrounds}
+
+% --- keep wide tables inside the margins ---
+\usepackage{etoolbox}
+\AtBeginEnvironment{longtable}{\footnotesize}
+\AtBeginEnvironment{tabular}{\small}
+\setlength{\tabcolsep}{4pt}
