@@ -130,8 +130,20 @@ open design surface"), here is what I decided:
    leaf cell is anchored on its foot rectangle with negative member offsets — a
    perfectly valid decomposition that simply differs from how the generator was
    written. We report *agreement with* ground truth, never *correctness relative
-   to* it. The §3 repeat-length drop-off scale prior is not implemented (it's a
-   diagnostic for picking `L_min`, not a decision rule).
+   to* it.
+
+8. **Repeat-length drop-off (§3) — now implemented, as a selectable option.**
+   `dropoff_curve()` computes R(L)/F(L) over motif size L (via rtree shingles at
+   each size); the cell scale is the L at the top of the sharpest *rise* in the
+   distinct-motif count R (grow the motif until its neighborhood fragments — the
+   "grow, grow, grow, then suddenly the repeat stops" signal). `Selection::DropOff`
+   promotes motifs at that scale instead of by MDL gain (default stays
+   `MDLGain`). `dropoff_demo` prints the curve and compares the two criteria.
+   Honest finding, matching the design's framing of §3 as a *scale prior* not a
+   universal decider: the drop-off is a clean cell-scale signal for **isolated
+   motifs** (surrounded by non-repeating content — nested→2, defective→4), but on
+   a **dense lattice** sub-units repeat too, so the signal weakens; MDL + exact
+   verification remain the default there. On the clean demos both criteria agree.
 
 ## Array detection = the lattice-aligned special case (demonstrated)
 

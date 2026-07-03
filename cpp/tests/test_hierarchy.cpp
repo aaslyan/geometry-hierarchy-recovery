@@ -92,6 +92,19 @@ int main() {
   CHECK(hd.n_defective == 1, "exactly one instance flagged defective");
   CHECK(hd.missing_area > 1.0, "the missing member is recorded as defect area");
 
+  // --- Repeat-length drop-off (companion §3) as a controlling option. ---------
+  std::printf("[hierarchy] repeat-length drop-off + DropOff selection\n");
+  DropoffCurve cn = dropoff_curve(nested_motif_layout().rects);
+  CHECK(cn.elbow_size == 2, "drop-off finds the 2-rect leaf motif scale (nested)");
+  DropoffCurve cd = dropoff_curve(defective_motif_layout().rects);
+  CHECK(cd.elbow_size == 4, "drop-off finds the 4-rect motif scale (defective)");
+
+  RecoverConfig dcfg;
+  dcfg.selection = Selection::DropOff;
+  Hierarchy hdo = recover_hierarchy(nested_motif_layout().rects, dcfg);
+  CHECK(hdo.flatten_matches, "DropOff selection still yields an exact hierarchy");
+  CHECK(!hdo.cells.empty(), "DropOff selection recovers at least one cell");
+
   std::printf("\n%s (%d failure%s)\n", g_failures == 0 ? "ALL PASSED" : "FAILURES",
               g_failures, g_failures == 1 ? "" : "s");
   return g_failures == 0 ? 0 : 1;

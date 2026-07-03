@@ -58,6 +58,9 @@ target_link_libraries(erasure_demo PRIVATE adt)
 add_executable(gds_recover cpp/apps/gds_recover.cpp)
 target_link_libraries(gds_recover PRIVATE adt)
 
+add_executable(dropoff_demo cpp/apps/dropoff_demo.cpp)
+target_link_libraries(dropoff_demo PRIVATE adt)
+
 enable_testing()
 add_executable(test_bugs cpp/tests/test_bugs.cpp)
 target_link_libraries(test_bugs PRIVATE adt)

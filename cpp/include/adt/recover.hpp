@@ -15,10 +15,20 @@
 
 namespace adt::hr {
 
+// Which criterion promotes a repeated motif to a cell.
+//   MDLGain  — description-length reduction: gain = (k-1)|body| - k·inst - def.
+//   DropOff  — the repeat-length "cliff": grow the motif and watch how many
+//              copies survive; promote motifs at the size just before the count
+//              falls off a cliff (the natural cell scale, companion §3). This is
+//              the "grow, grow, grow, then it suddenly drops" signal made explicit.
+enum class Selection { MDLGain, DropOff };
+
 struct RecoverConfig {
   double quantum = 0.5;      // coordinate/shape quantization for signatures
   int neighborhood_k = 1;    // Channel-B seed size (seed + k nearest); small on
                              // purpose — seed-and-extend growth completes the body
+  Selection selection = Selection::MDLGain;  // promotion criterion (see above)
+  int dropoff_max_size = 12; // largest motif size probed when finding the cliff
   double grow_radius = 60.0; // seed-and-extend search radius around a motif
   int max_cell_members = 256;// cap on cell body size — bounds growth so a perfectly
                              // periodic region can't grow an unbounded cell (perf)
@@ -62,5 +72,23 @@ struct LatticeFit {
 };
 LatticeFit fit_lattice(const std::vector<std::array<double, 2>>& anchors,
                        double tol = 1.0);
+
+// Repeat-length drop-off curve (companion §3). For each motif size L, count the
+// distinct geometric motifs of that size that recur (≥ min_instances) and their
+// total occurrences. The curve rises with small motifs and falls off a cliff past
+// the true cell scale; `elbow_size` is the size at the top of the sharpest drop —
+// the "grow until it suddenly stops repeating" scale. This is a diagnostic and,
+// via Selection::DropOff, an alternative promotion criterion to MDL gain.
+struct DropoffPoint {
+  int size = 0;                // motif size L (number of primitives)
+  int distinct_motifs = 0;     // R(L): distinct motifs of size L recurring ≥ min_instances
+  int total_occurrences = 0;   // F(L): summed occurrences of those motifs
+};
+struct DropoffCurve {
+  std::vector<DropoffPoint> points;  // by increasing size L
+  int elbow_size = 0;                // L at the top of the sharpest drop (cell scale)
+};
+DropoffCurve dropoff_curve(const std::vector<Rect>& layout,
+                           const RecoverConfig& cfg = {});
 
 }  // namespace adt::hr

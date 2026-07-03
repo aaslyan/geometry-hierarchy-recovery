@@ -328,6 +328,47 @@ void defect_rescan(int cell_id, const std::vector<Member>& body,
   }
 }
 
+// Repeat-length drop-off curve (companion §3) over a primitive list: for each
+// motif size L, how many distinct size-L neighborhoods recur, and their total
+// occurrences. F(L) falls off a cliff past the true cell scale; the elbow is the
+// size at the top of the sharpest drop.
+DropoffCurve compute_curve(const std::vector<Prim>& prims, const RTree& tree,
+                           const RecoverConfig& cfg) {
+  DropoffCurve curve;
+  const int n = (int)prims.size();
+  const int maxL = std::min(n, cfg.dropoff_max_size);
+  for (int L = 1; L <= maxL; ++L) {
+    std::map<std::string, int> counts;
+    for (int i = 0; i < n; ++i) {
+      std::vector<Member> sh{member_of(prims[i], ax(prims[i]), ay(prims[i]))};
+      for (int j : shingle_neighbors(i, prims, tree, L - 1))
+        sh.push_back(member_of(prims[j], ax(prims[i]), ay(prims[i])));
+      if ((int)sh.size() < L) continue;  // not enough neighbors at this size
+      counts[canonical_sig(sh, cfg.quantum)]++;
+    }
+    int R = 0, F = 0;
+    for (const auto& kv : counts)
+      if (kv.second >= cfg.min_instances) { ++R; F += kv.second; }
+    curve.points.push_back({L, R, F});
+    if (F == 0) break;  // no motif of this size recurs — past the cliff
+  }
+  // The cell scale is the size just before the distinct-motif count R(L) jumps:
+  // up to the cell, all instances share one canonical neighborhood (R small);
+  // past it, neighborhoods reach into non-repeating surroundings and fragment
+  // into many distinct motifs (R rises sharply). The elbow is the L at the top of
+  // that rise — "grow until the motif suddenly stops being the same everywhere."
+  // (For a dense lattice this signal is weak — sub-units repeat too — which is
+  // exactly why §3 is a scale prior, not a universal decider; MDL wins there.)
+  int best_rise = 0;
+  for (std::size_t i = 0; i + 1 < curve.points.size(); ++i) {
+    int rise = curve.points[i + 1].distinct_motifs - curve.points[i].distinct_motifs;
+    if (rise > best_rise) { best_rise = rise; curve.elbow_size = curve.points[i].size; }
+  }
+  if (curve.elbow_size == 0 && !curve.points.empty())
+    curve.elbow_size = curve.points.front().size;
+  return curve;
+}
+
 std::vector<Prim> round(const std::vector<Prim>& prims, const RecoverConfig& cfg,
                         Hierarchy& hier, int level, bool& changed) {
   changed = false;
@@ -395,7 +436,7 @@ std::vector<Prim> round(const std::vector<Prim>& prims, const RecoverConfig& cfg
     int k = (int)occ.size(), s = (int)B0.size();
     if (k < cfg.min_instances || s < cfg.min_cell_members) continue;
     double gain = (k - 1) * (double)s - k * cfg.cost_instance - cfg.def_overhead;
-    if (gain <= cfg.gain_min) continue;
+    if (cfg.selection == Selection::MDLGain && gain <= cfg.gain_min) continue;
 
     cands.push_back({B0, occ, std::move(covered), std::move(boxes), gain});
   }
@@ -416,9 +457,22 @@ std::vector<Prim> round(const std::vector<Prim>& prims, const RecoverConfig& cfg
   for (auto& kv : best) uniq.push_back(cands[kv.second]);
 
   auto t3 = clk();
-  // --- Greedy weighted set-packing selection (§2.7). --------------------------
-  std::sort(uniq.begin(), uniq.end(),
-            [](const Candidate& a, const Candidate& b) { return a.gain > b.gain; });
+  // --- Selection: order candidates, then greedy weighted set-packing (§2.7). ---
+  // MDLGain orders by description-length reduction. DropOff orders by proximity to
+  // the repeat-length cliff (§3) — the primitive cell scale — so the cell at the
+  // drop-off is taken ahead of a higher-gain supercell.
+  int elbow = 0;
+  if (cfg.selection == Selection::DropOff)
+    elbow = compute_curve(prims, tree, cfg).elbow_size;
+  std::sort(uniq.begin(), uniq.end(), [&](const Candidate& a, const Candidate& b) {
+    if (cfg.selection == Selection::DropOff) {
+      int da = std::abs((int)a.body.size() - elbow);
+      int db = std::abs((int)b.body.size() - elbow);
+      if (da != db) return da < db;  // closest to the cliff scale wins
+      return a.occ.size() * a.body.size() > b.occ.size() * b.body.size();  // coverage
+    }
+    return a.gain > b.gain;
+  });
   std::vector<char> used(n, 0), consumed(n, 0);
   std::vector<Prim> out;
   std::vector<std::pair<int, std::vector<Member>>> created;  // (cell id, body) this round
@@ -431,8 +485,11 @@ std::vector<Prim> round(const std::vector<Prim>& prims, const RecoverConfig& cfg
       if (free) keep.push_back(i);
     }
     int k2 = (int)keep.size(), s = (int)c.body.size();
-    double gain2 = (k2 - 1) * (double)s - k2 * cfg.cost_instance - cfg.def_overhead;
-    if (k2 < cfg.min_instances || gain2 <= cfg.gain_min) continue;
+    if (k2 < cfg.min_instances) continue;
+    if (cfg.selection == Selection::MDLGain) {
+      double gain2 = (k2 - 1) * (double)s - k2 * cfg.cost_instance - cfg.def_overhead;
+      if (gain2 <= cfg.gain_min) continue;  // DropOff gates on scale, not gain
+    }
 
     int new_id = (int)hier.cells.size() + 1;
     CellDef def;
@@ -546,6 +603,14 @@ LatticeFit fit_lattice(const std::vector<std::array<double, 2>>& anchors, double
   f.missing = f.ncols * f.nrows - f.occupied;
   f.ok = true;
   return f;
+}
+
+DropoffCurve dropoff_curve(const std::vector<Rect>& layout, const RecoverConfig& cfg) {
+  std::vector<Prim> prims;
+  prims.reserve(layout.size());
+  for (const auto& r : layout) prims.push_back({0, r, 0});
+  RTree tree = build_rtree(prims);
+  return compute_curve(prims, tree, cfg);
 }
 
 Hierarchy recover_hierarchy(const std::vector<Rect>& layout, const RecoverConfig& cfg) {
