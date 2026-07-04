@@ -703,6 +703,28 @@ remove conflicts, repeat'' heuristic --- the design's sanctioned first
 pass --- with ILP/global optimization left as future work {[}HR, §2.7;
 NOTES, Phase-2 decision 5{]}.
 
+\textbf{An alternative promotion criterion --- the repeat-length
+drop-off.} MDL gain is not the only way to fix the cell scale. The
+design also proposes a \emph{repeat-length drop-off} {[}HR, §3{]}: as a
+motif is grown, count the distinct motifs of each size \texttt{L} that
+still recur; the count stays low while the growing neighborhood is the
+shared cell, then rises sharply once it reaches into non-repeating
+surroundings --- the size at the top of that rise is the natural cell
+scale (``grow the motif until the repeat suddenly stops''). We implement
+this both as a first-class inspectable analysis
+(\texttt{dropoff\_curve}, giving \texttt{R(L)}/\texttt{F(L)}) and as a
+selectable promotion criterion (\texttt{Selection::DropOff}) that
+promotes motifs at the drop-off scale rather than by gain, with
+\texttt{Selection::MDLGain} remaining the default. Consistent with the
+design's framing of §3 as a \emph{scale prior} rather than a universal
+decider, the drop-off is a clean cell-scale signal for \textbf{isolated}
+motifs surrounded by non-repeating content --- it recovers the
+2-rectangle nested motif and the 4-rectangle defective motif exactly ---
+but weakens on a \textbf{dense lattice}, where sub-units repeat as well
+and the sharp cliff shifts to the array extent; there, MDL gain plus
+exact verification remain stronger. On the clean demos the two criteria
+agree; exposing both makes them comparable per layout.
+
 \textbf{Recursive nesting.} After replacing selected instances with cell
 references, the compressed representation (references + residual) is
 re-tokenized and passed back through the same steps, discovering cells
