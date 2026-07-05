@@ -42,7 +42,7 @@ void append(std::vector<Rect>& a, const std::vector<Rect>& b) {
 
 ErasureDesign make_datapath(int n_gates, int n_rows, int n_blocks, bool mirror,
                             int clutter, bool defect) {
-  const double gate_pitch = 22, row_pitch = 26, block_pitch = 0;  // block_pitch set below
+  const double gate_pitch = 22, row_pitch = 26;
   ErasureDesign d;
   d.name = "datapath";
   d.gt_leaf_rects = (int)gate_rects().size();
@@ -93,12 +93,15 @@ ErasureResult run_erasure(const ErasureDesign& d) {
   r.cells = (int)h.cells.size();
   r.levels = h.levels;
   r.top = (int)h.top.size();
+  r.arrays = (int)h.arrays.size();
   r.residual = (int)h.residual.size();
   r.n_defective = h.n_defective;
   r.defect_area = h.missing_area;
   r.flat_leaf = h.flat_leaf_count;
   r.hier_cost = h.hier_cost;
+  r.array_cost = h.array_cost;
   r.compression = h.hier_cost ? (double)h.flat_leaf_count / h.hier_cost : 0;
+  r.array_compression = h.array_cost ? (double)h.flat_leaf_count / h.array_cost : 0;
   for (const auto& c : h.cells)
     if (c.leaf_count == d.gt_leaf_rects) r.leaf_recovered = true;
   return r;

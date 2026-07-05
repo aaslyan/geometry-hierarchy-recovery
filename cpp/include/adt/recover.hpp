@@ -43,6 +43,12 @@ struct RecoverConfig {
 
   int max_levels = 6;        // recursion depth cap (companion §2.8)
 
+  // Top-level array-node compression. After exact recovery, groups of placements
+  // for the same cell/orientation that fit a lattice can be reported as one
+  // array node instead of K individual references. Existing top placements stay
+  // intact for flattening; this only changes the compressed cost/reporting view.
+  int min_array_instances = 4;
+
   // Defect tolerance (companion §6). After clean cells are established, a rescan
   // accepts PARTIAL instances (a missing member or two), recording the gaps as a
   // defect layer. Only leaf members may be missing — a missing sub-cell reference

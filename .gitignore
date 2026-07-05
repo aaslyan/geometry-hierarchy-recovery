@@ -7,6 +7,10 @@
 .venv/
 *.gds
 flat_gds.txt
+# generated flatten dump (regenerate via scripts/flatten_gds.py)
+flat_from_any_gds.txt
+# Serena tool cache
+/.serena/
 paper/*.aux
 paper/*.log
 paper/*.aux

@@ -32,6 +32,10 @@ int main() {
     CHECK(r.leaf_recovered, buf);
     std::snprintf(buf, sizeof buf, "%s: compresses (>2x)", c.l);
     CHECK(r.compression > 2.0, buf);
+    std::snprintf(buf, sizeof buf, "%s: array nodes found", c.l);
+    CHECK(r.arrays > 0, buf);
+    std::snprintf(buf, sizeof buf, "%s: array-node cost improves compression", c.l);
+    CHECK(r.array_cost < r.hier_cost, buf);
   }
   std::printf("\n%s (%d failure%s)\n", g_failures == 0 ? "ALL PASSED" : "FAILURES",
               g_failures, g_failures == 1 ? "" : "s");

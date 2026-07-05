@@ -50,9 +50,23 @@ struct Placement {
   int orient = 0;    // D4 orientation of this instance
 };
 
+// Compact top-level representation for placements of the same cell/orientation
+// that lie on a regular lattice. The ordinary `top` placements remain the
+// authoritative expansion path; array nodes are an additional compressed view.
+struct ArrayNode {
+  int cell = 0;
+  int orient = 0;
+  double ox = 0, oy = 0;
+  double dx = 0, dy = 0;
+  int ncols = 0, nrows = 0;
+  int occupied = 0;
+  int missing = 0;
+};
+
 struct Hierarchy {
   std::vector<CellDef> cells;      // indexed by id-1
   std::vector<Placement> top;      // top-level instances
+  std::vector<ArrayNode> arrays;    // compact lattice view over top placements
   std::vector<Rect> residual;      // leaf rectangles explained by no cell
   int levels = 0;
 
@@ -68,6 +82,7 @@ struct Hierarchy {
   // Reporting (companion §6):
   int flat_leaf_count = 0;         // |G| in leaf rectangles
   int hier_cost = 0;               // Σ body sizes + top instances + residual
+  int array_cost = 0;              // same, but lattice top placements cost O(1)
   bool flatten_matches = false;    // (flatten(H) − missing) == G within tolerance
 };
 

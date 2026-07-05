@@ -62,22 +62,34 @@ int main(int argc, char** argv) {
 
   std::printf("=== real-GDS hierarchy-erasure recovery ===\n");
   std::printf("flattened GDS: %zu rectangles\n", rects.size());
-  std::printf("GROUND TRUTH : %d cells, gate=%d rects x %d instances, %d levels\n",
-              gt_cells, gt_gate_rects, gt_instances, gt_levels);
+  if (gt_cells || gt_gate_rects || gt_instances || gt_levels)
+    std::printf("GROUND TRUTH : %d cells, gate=%d rects x %d instances, %d levels\n",
+                gt_cells, gt_gate_rects, gt_instances, gt_levels);
+  else
+    std::printf("SOURCE       : no synthetic ground-truth header; reporting recovery only\n");
   std::printf("RECOVERED    : %zu cells across %d levels, %zu top placements, "
               "%zu residual\n",
               h.cells.size(), h.levels, h.top.size(), h.residual.size());
   std::printf("               compression %.2fx (flat %d -> hier %d)\n",
               (double)h.flat_leaf_count / h.hier_cost, h.flat_leaf_count, h.hier_cost);
+  std::printf("               array-node compression %.2fx (flat %d -> array-hier %d, "
+              "%zu array node%s)\n",
+              (double)h.flat_leaf_count / h.array_cost, h.flat_leaf_count, h.array_cost,
+              h.arrays.size(), h.arrays.size() == 1 ? "" : "s");
   std::printf("               G subset of flatten(H): %s%s\n",
               h.flatten_matches ? "YES (exact)" : "NO",
               h.n_defective ? "  (defects present)" : "");
-  std::printf("AGREEMENT    : gate-sized cell (%d rects) recovered: %s",
-              gt_gate_rects, gate_like ? "YES" : "no");
-  if (gate_like)
-    std::printf("  (%d instances vs %d in ground truth)", gate_usage, gt_instances);
-  std::printf("\n(recovered hierarchy is a compact, geometrically exact "
-              "decomposition; agreement, not accuracy -- HR 1.3)\n");
+  if (gt_gate_rects) {
+    std::printf("AGREEMENT    : gate-sized cell (%d rects) recovered: %s",
+                gt_gate_rects, gate_like ? "YES" : "no");
+    if (gate_like)
+      std::printf("  (%d instances vs %d in ground truth)", gate_usage, gt_instances);
+    std::printf("\n(recovered hierarchy is a compact, geometrically exact "
+                "decomposition; agreement, not accuracy -- HR 1.3)\n");
+  } else {
+    std::printf("RECOVERY     : compact, geometrically exact decomposition inferred "
+                "from flat rectangles\n");
+  }
 
   write_hierarchy_svg("hierarchy_gds.svg", h, "gds_erasure");
   std::printf("wrote hierarchy_gds.svg\n");

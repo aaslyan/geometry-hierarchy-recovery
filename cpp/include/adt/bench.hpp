@@ -32,9 +32,9 @@ ErasureDesign make_datapath(int n_gates, int n_rows, int n_blocks, bool mirror,
 struct ErasureResult {
   bool flatten_ok = false;    // G ⊆ flatten(H): all real geometry explained
   bool leaf_recovered = false;// a cell matching the ground-truth gate was found
-  int cells = 0, levels = 0, top = 0, residual = 0, n_defective = 0;
-  int flat_leaf = 0, hier_cost = 0;
-  double compression = 0, defect_area = 0;
+  int cells = 0, levels = 0, top = 0, arrays = 0, residual = 0, n_defective = 0;
+  int flat_leaf = 0, hier_cost = 0, array_cost = 0;
+  double compression = 0, array_compression = 0, defect_area = 0;
 };
 
 ErasureResult run_erasure(const ErasureDesign& d);

@@ -64,6 +64,10 @@ static void report(const Hierarchy& h, const HierLayout& L) {
   std::printf("compression: flat=%d  ->  hierarchical=%d   (ratio %.2fx)\n",
               h.flat_leaf_count, h.hier_cost,
               (double)h.flat_leaf_count / h.hier_cost);
+  if (!h.arrays.empty())
+    std::printf("array-node view: %zu array node(s), cost=%d   (ratio %.2fx)\n",
+                h.arrays.size(), h.array_cost,
+                (double)h.flat_leaf_count / h.array_cost);
   std::printf("G explained by flatten(H): %s", h.flatten_matches ? "YES" : "NO");
   if (h.n_defective > 0)
     std::printf("  (%d defective instance(s), defect area %.1f)", h.n_defective,

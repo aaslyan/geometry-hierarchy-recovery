@@ -613,6 +613,188 @@ DropoffCurve dropoff_curve(const std::vector<Rect>& layout, const RecoverConfig&
   return compute_curve(prims, tree, cfg);
 }
 
+namespace {
+struct PlacementGroupKey {
+  int cell = 0;
+  int orient = 0;
+  bool operator<(const PlacementGroupKey& o) const {
+    return std::make_pair(cell, orient) < std::make_pair(o.cell, o.orient);
+  }
+};
+
+struct OneDRun {
+  std::vector<int> ids;
+  double origin = 0;
+  double step = 0;
+  int count = 0;
+  int missing = 0;
+};
+
+bool regular_1d_run(const std::vector<int>& ids, const std::vector<double>& coord,
+                    double tol, OneDRun& out) {
+  if (ids.size() < 2) return false;
+  std::vector<int> sorted = ids;
+  std::sort(sorted.begin(), sorted.end(), [&](int a, int b) {
+    return coord[a] < coord[b];
+  });
+
+  double step = 0;
+  for (std::size_t i = 1; i < sorted.size(); ++i) {
+    double d = coord[sorted[i]] - coord[sorted[i - 1]];
+    if (d <= tol) continue;
+    if (step == 0 || d < step) step = d;
+  }
+  if (step <= 0) return false;
+
+  for (std::size_t i = 1; i < sorted.size(); ++i) {
+    double d = coord[sorted[i]] - coord[sorted[i - 1]];
+    double m = d / step;
+    if (std::abs(m - std::lround(m)) > tol / step) return false;
+  }
+
+  int count = (int)std::lround((coord[sorted.back()] - coord[sorted.front()]) / step) + 1;
+  out.ids = std::move(sorted);
+  out.origin = coord[out.ids.front()];
+  out.step = step;
+  out.count = count;
+  out.missing = count - (int)out.ids.size();
+  return true;
+}
+
+std::vector<OneDRun> split_regular_1d_runs(const std::vector<int>& ids,
+                                           const std::vector<double>& coord,
+                                           double tol, int min_instances) {
+  std::vector<int> sorted = ids;
+  std::sort(sorted.begin(), sorted.end(), [&](int a, int b) {
+    return coord[a] < coord[b];
+  });
+
+  std::vector<OneDRun> runs;
+  std::vector<int> cur;
+  double step = 0;
+  for (int id : sorted) {
+    if (cur.empty()) {
+      cur.push_back(id);
+      continue;
+    }
+    double d = coord[id] - coord[cur.back()];
+    bool split = false;
+    if (d > tol) {
+      if (step == 0) step = d;
+      else {
+        double m = d / step;
+        split = std::abs(m - std::lround(m)) > tol / step;
+      }
+    }
+    if (split) {
+      OneDRun run;
+      if ((int)cur.size() >= min_instances && regular_1d_run(cur, coord, tol, run))
+        runs.push_back(std::move(run));
+      cur.clear();
+      step = 0;
+    }
+    cur.push_back(id);
+  }
+  OneDRun run;
+  if ((int)cur.size() >= min_instances && regular_1d_run(cur, coord, tol, run))
+    runs.push_back(std::move(run));
+  return runs;
+}
+}
+
+void build_array_nodes(Hierarchy& hier, const RecoverConfig& cfg) {
+  hier.arrays.clear();
+  hier.array_cost = hier.hier_cost;
+  if (hier.top.empty() || cfg.min_array_instances <= 0) return;
+
+  std::map<PlacementGroupKey, std::vector<int>> groups;
+  for (int i = 0; i < (int)hier.top.size(); ++i)
+    groups[{hier.top[i].cell, hier.top[i].orient}].push_back(i);
+
+  std::vector<char> covered(hier.top.size(), 0);
+  int array_ref_cost = 0;
+  int covered_refs = 0;
+  for (const auto& kv : groups) {
+    const auto& ids = kv.second;
+    if ((int)ids.size() < cfg.min_array_instances) continue;
+
+    std::vector<std::array<double, 2>> anchors;
+    anchors.reserve(ids.size());
+    for (int id : ids) anchors.push_back({hier.top[id].x, hier.top[id].y});
+    LatticeFit lf = fit_lattice(anchors);
+    if (!lf.ok || lf.occupied != (int)ids.size()) continue;
+
+    // Cost one array reference plus explicit missing-site exceptions. This is a
+    // first-pass model; a future bitmap/run-length model can refine sparse cases.
+    int node_cost = 1 + lf.missing;
+    if (node_cost >= (int)ids.size()) continue;
+
+    hier.arrays.push_back({kv.first.cell, kv.first.orient, lf.ox, lf.oy, lf.dx,
+                           lf.dy, lf.ncols, lf.nrows, lf.occupied, lf.missing});
+    array_ref_cost += node_cost;
+    covered_refs += (int)ids.size();
+    for (int id : ids) covered[id] = 1;
+  }
+
+  // If a whole group is not one lattice, recover regular 1D rows/columns. This
+  // catches dense datapaths where block gutters break one global pitch but each
+  // slice row is still an array.
+  const double tol = 1.0;
+  for (const auto& kv : groups) {
+    std::vector<int> open;
+    for (int id : kv.second) if (!covered[id]) open.push_back(id);
+    if ((int)open.size() < cfg.min_array_instances) continue;
+
+    std::vector<double> xs(hier.top.size()), ys(hier.top.size());
+    for (int id : open) { xs[id] = hier.top[id].x; ys[id] = hier.top[id].y; }
+
+    std::map<long, std::vector<int>> by_row;
+    for (int id : open) by_row[qbin(hier.top[id].y, tol)].push_back(id);
+    for (const auto& row : by_row) {
+      for (const auto& run : split_regular_1d_runs(row.second, xs, tol,
+                                                   cfg.min_array_instances)) {
+        int node_cost = 1 + run.missing;
+        if (node_cost >= (int)run.ids.size()) continue;
+        int first = run.ids.front();
+        hier.arrays.push_back({kv.first.cell, kv.first.orient, run.origin,
+                               hier.top[first].y, run.step, 0.0, run.count, 1,
+                               (int)run.ids.size(), run.missing});
+        array_ref_cost += node_cost;
+        covered_refs += (int)run.ids.size();
+        for (int id : run.ids) covered[id] = 1;
+      }
+    }
+
+    open.clear();
+    for (int id : kv.second) if (!covered[id]) open.push_back(id);
+    if ((int)open.size() < cfg.min_array_instances) continue;
+
+    std::map<long, std::vector<int>> by_col;
+    for (int id : open) by_col[qbin(hier.top[id].x, tol)].push_back(id);
+    for (const auto& col : by_col) {
+      for (const auto& run : split_regular_1d_runs(col.second, ys, tol,
+                                                   cfg.min_array_instances)) {
+        int node_cost = 1 + run.missing;
+        if (node_cost >= (int)run.ids.size()) continue;
+        int first = run.ids.front();
+        hier.arrays.push_back({kv.first.cell, kv.first.orient, hier.top[first].x,
+                               run.origin, 0.0, run.step, 1, run.count,
+                               (int)run.ids.size(), run.missing});
+        array_ref_cost += node_cost;
+        covered_refs += (int)run.ids.size();
+        for (int id : run.ids) covered[id] = 1;
+      }
+    }
+  }
+
+  if (hier.arrays.empty()) return;
+
+  int body_cost = 0;
+  for (const auto& c : hier.cells) body_cost += (int)c.members.size();
+  int uncovered_refs = (int)hier.top.size() - covered_refs;
+  hier.array_cost = body_cost + (int)hier.residual.size() + uncovered_refs + array_ref_cost;
+}
+
 Hierarchy recover_hierarchy(const std::vector<Rect>& layout, const RecoverConfig& cfg) {
   Hierarchy hier;
   hier.flat_leaf_count = (int)layout.size();
@@ -692,8 +874,10 @@ Hierarchy recover_hierarchy(const std::vector<Rect>& layout, const RecoverConfig
   int cost = (int)hier.top.size() + (int)hier.residual.size();
   for (const auto& c : hier.cells) cost += (int)c.members.size();
   hier.hier_cost = cost;
+  hier.array_cost = cost;
   hier.flatten_matches = true;  // only valid rounds were kept
   hier.missing_area = defect;
+  build_array_nodes(hier, cfg);
   return hier;
 }
 

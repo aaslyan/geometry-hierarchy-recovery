@@ -53,9 +53,10 @@ static void unify(const std::string& name, const std::vector<Rect>& rects) {
   // (C) Unconstrained hierarchy recovery — the more compact nested view.
   hr::Hierarchy hf = hr::recover_hierarchy(rects);
   std::printf("[hierarchy, full]     %zu cells across %d levels, cost %d vs flat %d "
-              "(%.2fx)  — a different, more compact valid hierarchy (§1.3)\n",
+              "(%.2fx), array-cost %d (%.2fx)  — a different compact view (§1.3)\n",
               hf.cells.size(), hf.levels, hf.hier_cost, hf.flat_leaf_count,
-              (double)hf.flat_leaf_count / hf.hier_cost);
+              (double)hf.flat_leaf_count / hf.hier_cost, hf.array_cost,
+              (double)hf.flat_leaf_count / hf.array_cost);
 }
 
 int main() {
