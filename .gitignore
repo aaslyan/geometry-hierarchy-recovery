@@ -9,6 +9,8 @@
 flat_gds.txt
 # generated flatten dump (regenerate via scripts/flatten_gds.py)
 flat_from_any_gds.txt
+# generated nested-recovery JSON (regenerate via ./build/nested_demo <flat.txt>)
+recovered_nested.json
 # Serena tool cache
 /.serena/
 paper/*.aux

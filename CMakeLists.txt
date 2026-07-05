@@ -37,6 +37,7 @@ add_library(adt
   cpp/src/svg.cpp
   # Phase 2 — hierarchy recovery
   cpp/src/recover.cpp
+  cpp/src/nested.cpp
   cpp/src/synthetic_hier.cpp
   cpp/src/hr_svg.cpp
   cpp/src/bench.cpp)
@@ -54,6 +55,9 @@ target_link_libraries(unify_demo PRIVATE adt)
 
 add_executable(erasure_demo cpp/apps/erasure_demo.cpp)
 target_link_libraries(erasure_demo PRIVATE adt)
+
+add_executable(nested_demo cpp/apps/nested_demo.cpp)
+target_link_libraries(nested_demo PRIVATE adt)
 
 add_executable(gds_recover cpp/apps/gds_recover.cpp)
 target_link_libraries(gds_recover PRIVATE adt)
@@ -77,3 +81,7 @@ add_test(NAME unify COMMAND test_unify)
 add_executable(test_bench cpp/tests/test_bench.cpp)
 target_link_libraries(test_bench PRIVATE adt)
 add_test(NAME bench COMMAND test_bench)
+
+add_executable(test_nested cpp/tests/test_nested.cpp)
+target_link_libraries(test_nested PRIVATE adt)
+add_test(NAME nested COMMAND test_nested)
