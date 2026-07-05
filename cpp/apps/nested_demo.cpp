@@ -9,6 +9,7 @@
 //   nested_demo               run the synthetic datapath suite
 //   nested_demo <flat.txt>    run on a flattened rectangle dump (e.g. flat_gds.txt)
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -73,10 +74,19 @@ int main(int argc, char** argv) {
       std::fprintf(stderr, "no rectangles read from %s\n", argv[1]);
       return 1;
     }
+    // Real PDK geometry lives at a different scale than the synthetic integer
+    // datapaths, so allow the two scale-sensitive knobs to be overridden:
+    //   nested_demo <flat.txt> [quantum] [grow_radius]
+    // quantum   — coordinate/shape snap (must resolve real feature sizes);
+    // grow_radius — seed-and-extend reach (should span one repeated tile).
+    RecoverConfig cfg;
+    if (argc > 2) cfg.quantum = std::atof(argv[2]);
+    if (argc > 3) cfg.grow_radius = std::atof(argv[3]);
     std::printf("mixed array/hierarchy extraction — real flattened GDS\n");
     if (!header.empty()) std::printf("%s\n", header.c_str());
-    std::printf("flattened: %zu rectangles\n\n", rects.size());
-    Nested h = recover_nested(rects);
+    std::printf("flattened: %zu rectangles  (quantum=%.4g grow_radius=%.4g)\n\n",
+                rects.size(), cfg.quantum, cfg.grow_radius);
+    Nested h = recover_nested(rects, cfg);
     report(argv[1], h);
     std::printf("\n");
     dump_structure(h);

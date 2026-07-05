@@ -11,6 +11,11 @@ flat_gds.txt
 flat_from_any_gds.txt
 # generated nested-recovery JSON (regenerate via ./build/nested_demo <flat.txt>)
 recovered_nested.json
+# generated SRAM crop dumps (regenerate via scripts/crop_sram_layer.py)
+flat_sram*.txt
+row_*.txt
+grid_*.txt
+full_row_*.txt
 # Serena tool cache
 /.serena/
 paper/*.aux

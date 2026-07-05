@@ -1,5 +1,28 @@
 # Mixed Array-Hierarchy Extraction Plan
 
+> **Implementation status.** This is the ORIGINAL design plan; the sections below
+> still read as forward-looking ("future work"), but a first pass is now
+> implemented in `cpp/{include/adt/nested.hpp, src/nested.cpp}` (driver
+> `recover_nested`, demo `nested_demo`, tests `test_nested`). Status against the
+> §"Implementation Order":
+>
+> - **Done:** (1) array expansion in `flatten` (nested array items expand exactly);
+>   (2) array nodes promoted to first-class *nested cells* that participate in
+>   later passes; (3) structural signatures / canonicalization (`body_signature`
+>   + `intern_cell` dedup); (4) repeated-run grouping (`promote_axis`); (5) exact
+>   verification after each pass with rollback (against `flatten(base)`); (6)
+>   source-aware `gate/slice/block/top` agreement metrics (in `test_nested`);
+>   (7) JSON output (`nested_to_json`, with real residual/defect geometry).
+> - **Partial / simplified:** nested cells are placed at orientation 0, with D4
+>   mirroring baked into distinct cell bodies rather than composed orientations;
+>   mirrored stacks currently yield interleaved per-orientation blocks rather than
+>   a single period-2 block cell.
+> - **Not yet:** (8) reconstructed hierarchical-GDS re-emission + external
+>   `flatten(orig)==flatten(recovered)`; real ORFS/SKY130 source-aware evaluation.
+>
+> Treat the "future work" phrasing in §1 and §8 below as the original framing, not
+> the current state.
+
 ## Goal
 
 Recover source-like hierarchy from flattened geometry by making array detection

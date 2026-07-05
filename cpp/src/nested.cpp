@@ -446,12 +446,21 @@ Nested recover_nested(const std::vector<Rect>& layout, const RecoverConfig& cfg)
   std::map<std::string, int> sig2id;
   int idle = 0, level = 2, axis = 0;
   while (idle < 2 && level <= cfg.max_levels + 2) {
+    // Snapshot the hierarchy AND the interning side-tables. intern_cell mutates
+    // sig2id (and cache) as it creates cells; if this pass is rejected below and
+    // h is rolled back, the side-tables must roll back too — otherwise a later
+    // pass could hit a stale signature and return a cell id that no longer exists
+    // in h.cells (a dangling reference the flatten walk would read out of bounds).
     Nested snap = h;
+    std::map<std::string, int> sig_snap = sig2id;
+    BBoxCache cache_snap = cache;
     bool ch = promote_axis(h, cfg, axis, level, cache, sig2id);
     if (ch) {
       std::vector<Rect> flat = flatten_nested(h);
       if (!multiset_equal(flat, ref, cfg.quantum)) {
         h = std::move(snap);  // revert: this pass broke exactness
+        sig2id = std::move(sig_snap);
+        cache = std::move(cache_snap);
         ch = false;
       }
     }
