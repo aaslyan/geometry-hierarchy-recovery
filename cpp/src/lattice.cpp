@@ -36,13 +36,35 @@ int self_score(const std::vector<Rect>& L, const ShapeSet& S, int axis, double d
   return s;
 }
 
-// Candidate translational periods along one axis, ranked by self-similarity. We
-// gather the distinct same-row (same-column) same-shape gaps as raw candidates —
-// which includes the true period and its multiples even when they are a few
-// shapes apart — then score each by self_score and keep the best, smallest first
-// (the fundamental period, not a multiple).
-std::vector<double> candidate_steps(const std::vector<Rect>& L, const ShapeSet& S,
-                                    int axis, double q) {
+// Interior-normalized periodicity: of the rectangles that HAVE a translate-by-d
+// partner slot within the extent, the fraction that actually land on a same-shape
+// rectangle. ~1 for a clean array (only the boundary column/row lacks a partner);
+// it drops by the foreign/defect fraction. This is the necessary-condition test —
+// a true 2D array must score high on BOTH axes — so it both strengthens the
+// hypothesis and gates out spurious lattices. Boundary-robust, unlike self_score/n.
+double interior_periodicity(const std::vector<Rect>& L, const ShapeSet& S, int axis,
+                            double d, double q) {
+  double maxc = -1e300;
+  for (const auto& r : L) maxc = std::max(maxc, axis == 0 ? r.x0 : r.y0);
+  long expected = 0, hit = 0;
+  for (const auto& r : L) {
+    double c = axis == 0 ? r.x0 : r.y0;
+    if (c + d > maxc + q) continue;  // boundary slot: no partner expected
+    ++expected;
+    double x = r.x0 + (axis == 0 ? d : 0), y = r.y0 + (axis == 0 ? 0 : d);
+    if (S.count({qb(x, q), qb(y, q), qb(r.width(), q), qb(r.height(), q)})) ++hit;
+  }
+  return expected ? (double)hit / (double)expected : 0.0;
+}
+
+// Candidate translational periods along one axis as (step, self_score) pairs,
+// ranked by self-similarity. Raw candidates are the distinct same-row (same-
+// column) same-shape gaps — which include the true period and its multiples even
+// a few shapes apart; scoring by self_score is what separates a real period from
+// the mirror pitch or an intra-tile spacing (both have many gaps but low score).
+std::vector<std::pair<double, int>> candidate_steps(const std::vector<Rect>& L,
+                                                    const ShapeSet& S, int axis,
+                                                    double q) {
   std::map<std::array<long, 3>, std::vector<double>> groups;
   for (const auto& r : L) {
     double other = axis == 0 ? r.y0 : r.x0;
@@ -59,25 +81,37 @@ std::vector<double> candidate_steps(const std::vector<Rect>& L, const ShapeSet& 
         if (d > 1.0) cand[qb(d, q)]++;
       }
   }
-  std::vector<std::pair<int, double>> scored;  // (self_score, step)
+  std::vector<std::pair<double, int>> scored;  // (step, self_score)
   for (auto& c : cand) {
     double d = c.first * q;
-    scored.push_back({self_score(L, S, axis, d, q), d});
+    scored.push_back({d, self_score(L, S, axis, d, q)});
   }
-  // Best score wins; among near-best, prefer the smallest step (the fundamental).
   std::sort(scored.begin(), scored.end(), [](auto& a, auto& b) {
-    if (a.first != b.first) return a.first > b.first;
-    return a.second < b.second;
+    if (a.second != b.second) return a.second > b.second;  // best score first
+    return a.first < b.first;                              // then smallest step
   });
-  int best = scored.empty() ? 0 : scored.front().first;
-  std::vector<double> out;
+  int best = scored.empty() ? 0 : scored.front().second;
+  std::vector<std::pair<double, int>> out;
   for (auto& s : scored) {
-    if (s.first < best / 2) break;      // keep only strongly self-similar periods
-    out.push_back(s.second);
+    if (s.second < best / 2) break;  // keep only strongly self-similar periods
+    out.push_back(s);
     if (out.size() >= 6) break;
   }
-  std::sort(out.begin(), out.end());    // ascending: fundamental tried alongside multiples
   return out;
+}
+
+// The FUNDAMENTAL generator: the smallest step whose self-similarity is within
+// `frac` of the best. A sub-period (e.g. a mirror pitch) scores lower and is
+// rejected; a multiple scores as high but is larger, so "smallest near-best" is
+// the true period.
+double fundamental(const std::vector<std::pair<double, int>>& scored, double frac) {
+  if (scored.empty()) return 0;
+  int best = 0;
+  for (auto& s : scored) best = std::max(best, s.second);
+  double d = scored.front().first;
+  for (auto& s : scored)
+    if (s.second >= frac * best && s.first < d) d = s.first;
+  return d;
 }
 
 using CellKey = std::pair<long, long>;  // (i, j)
@@ -231,50 +265,73 @@ Hierarchy recover_lattice(const std::vector<Rect>& layout, const RecoverConfig& 
   if (layout.size() < 8) return {};
 
   const double q = cfg.quantum;
+  const double gate = cfg.min_periodicity;
+  const bool dbg = std::getenv("ADT_LAT") != nullptr;
   ShapeSet S;
   for (const auto& r : layout) S[{qb(r.x0, q), qb(r.y0, q), qb(r.width(), q), qb(r.height(), q)}]++;
-  std::vector<double> csx = candidate_steps(layout, S, 0, q);
-  std::vector<double> csy = candidate_steps(layout, S, 1, q);
-  const bool dbg = std::getenv("ADT_LAT") != nullptr;
-  if (dbg) {
-    std::fprintf(stderr, "[lattice] n=%zu csx=", layout.size());
-    for (double d : csx) std::fprintf(stderr, "%.1f ", d);
-    std::fprintf(stderr, " csy=");
-    for (double d : csy) std::fprintf(stderr, "%.1f ", d);
-    std::fprintf(stderr, "\n");
-  }
-  if (csx.empty() || csy.empty()) return {};
 
-  // Try each (dx, dy) combo; keep the exact hierarchy that covers the most
-  // rectangles (fewest residual), tie-broken toward MORE placements — i.e. the
-  // smallest fundamental tile, which gives the densest array and the most reuse
-  // for the nested pass. (A too-large period also covers everything but with a
-  // bigger, less-reusable tile; a too-small period over-covers and self-limits.)
-  Hierarchy best;
-  LatticeInfo best_info;
-  int best_covered = -1, best_place = -1;
-  for (double dx : csx) {
-    for (double dy : csy) {
+  auto sx = candidate_steps(layout, S, 0, q);
+  auto sy = candidate_steps(layout, S, 1, q);
+  if (sx.empty() || sy.empty()) return {};
+
+  // --- Two-axis periodicity gate (the necessary-condition cross-check). --------
+  // A 2D array forces 1D periodicity on BOTH axes (§3). Score the fundamental
+  // generator of each axis: if the geometry does not translate onto itself under
+  // both dx and dy (up to boundary + a tolerated foreign/defect fraction), it is
+  // not a 2D array and we decline — cheaply, without any tiling. This is also what
+  // lets us *claim* an array once both scores are high: two full 1D translation-
+  // invariances imply invariance under the whole lattice group.
+  double dx0 = fundamental(sx, 0.85), dy0 = fundamental(sy, 0.85);
+  double px = interior_periodicity(layout, S, 0, dx0, q);
+  double py = interior_periodicity(layout, S, 1, dy0, q);
+  if (dbg)
+    std::fprintf(stderr, "[lattice] n=%zu fundamental dx=%.1f (px=%.2f) dy=%.1f (py=%.2f) gate=%.2f\n",
+                 layout.size(), dx0, px, dy0, py, gate);
+  if (px < gate || py < gate) return {};  // fails the necessary condition -> not an array
+
+  auto accept = [&](Hierarchy&& h, LatticeInfo li, bool fast) {
+    li.periodicity_x = px; li.periodicity_y = py; li.fast_path = fast;
+    out = li;
+    return std::move(h);
+  };
+  auto covers = [&](const LatticeInfo& li) {
+    return (int)layout.size() - li.residual >= (int)(0.3 * layout.size());
+  };
+
+  // --- Fast path: both axes are strongly periodic, so tile at the fundamental
+  // generators and verify once — no Cartesian combo search. ---------------------
+  {
+    LatticeInfo li;
+    Hierarchy h = build_for(layout, dx0, dy0, q, li);
+    if (!h.cells.empty() && multiset_equal(flatten(h), layout, q) && covers(li)) {
+      if (dbg) std::fprintf(stderr, "[lattice] FAST PATH: tile=%d place=%d resid=%d\n",
+                            li.tile_members, li.placements, li.residual);
+      return accept(std::move(h), li, true);
+    }
+  }
+
+  // --- Fallback: the fundamental tiling was thin (e.g. a partial/edge crop);
+  // search the candidate combos for the tiling that covers the most, tie-broken
+  // toward more placements (smaller, more reusable tile). The array-ness decision
+  // was already made by the gate above; this only chooses the representation. ---
+  Hierarchy best; LatticeInfo best_info; int best_covered = -1, best_place = -1;
+  for (auto& cx : sx) {
+    for (auto& cy : sy) {
       LatticeInfo li;
-      Hierarchy h = build_for(layout, dx, dy, q, li);
-      if (h.cells.empty()) { if (dbg) std::fprintf(stderr, "[lattice]  dx=%.1f dy=%.1f -> empty build\n", dx, dy); continue; }
-      bool exact = multiset_equal(flatten(h), layout, q);
+      Hierarchy h = build_for(layout, cx.first, cy.first, q, li);
+      if (h.cells.empty() || !multiset_equal(flatten(h), layout, q)) continue;
       int covered = (int)layout.size() - li.residual;
       if (dbg)
-        std::fprintf(stderr, "[lattice]  dx=%.1f dy=%.1f -> tile=%d place=%d resid=%d covered=%d exact=%d\n",
-                     dx, dy, li.tile_members, li.placements, li.residual, covered, exact);
-      if (!exact) continue;  // exactness gate
+        std::fprintf(stderr, "[lattice]  dx=%.1f dy=%.1f -> tile=%d place=%d resid=%d covered=%d\n",
+                     cx.first, cy.first, li.tile_members, li.placements, li.residual, covered);
       if (covered > best_covered ||
           (covered == best_covered && li.placements > best_place)) {
         best = h; best_info = li; best_covered = covered; best_place = li.placements;
       }
     }
   }
-
-  // Require the lattice to explain a real fraction of the layout, else decline.
-  if (best.cells.empty() || best_covered < (int)(0.3 * layout.size())) return {};
-  out = best_info;
-  return best;
+  if (best.cells.empty() || !covers(best_info)) return {};
+  return accept(std::move(best), best_info, false);
 }
 
 }  // namespace adt::hr

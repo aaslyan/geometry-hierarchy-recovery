@@ -175,13 +175,71 @@ int main() {
     CHECK(info.tile_members == (int)motif.size(), "lattice: tile == one motif");
     CHECK(info.placements == COLS * ROWS, "lattice: one placement per cell");
     CHECK(info.residual == 0, "lattice: no residual on a perfect array");
+    CHECK(info.periodicity_x > 0.99 && info.periodicity_y > 0.99,
+          "lattice: two-axis periodicity ~1.0 on a perfect array");
     CHECK(flatten(h).size() == L.size(), "lattice: flatten(H) reproduces |G| exactly");
 
-    // End-to-end: recover_nested falls back to the lattice prior and nests it.
+    // End-to-end: recover_nested reproduces G exactly and compresses (whichever
+    // base path — a clean discriminative motif like this one is handled by the
+    // shingle recoverer; the lattice prior is the fallback for dense arrays it
+    // cannot, exercised directly above and on the real SRAM crop in §7.6).
     Nested nh = recover_nested(L);
     CHECK(nh.matches_base_flatten && nh.explains_g && nh.defect_rects == 0,
           "lattice+nested: flatten(nested) == G exact");
     CHECK(nh.nested_cost < nh.flat_leaf_count, "lattice+nested: compresses the array");
+  }
+
+  // ---- (D) Array + standalone foreign geometry (leave-in-top-cell mode) ------
+  // A foreign shape that does NOT touch the array (a distinct rect off the tile
+  // grid) must not defeat recovery: the periodicity stays high, the array is
+  // recovered exactly, and the foreign geometry simply falls to residual (the
+  // top cell). Same construction as (C) plus three off-lattice 1x1 rects.
+  std::printf("\n[nested] array + standalone foreign geometry\n");
+  {
+    const std::vector<Rect> motif = {
+        {0, 0, 10, 2}, {0, 3, 2, 10}, {3, 4, 8, 9}, {4, 2, 9, 3}};
+    const int COLS = 6, ROWS = 5;
+    const double px = 10, py = 10;
+    std::vector<Rect> L;
+    for (int i = 0; i < COLS; ++i)
+      for (int j = 0; j < ROWS; ++j)
+        for (const auto& m : motif)
+          L.push_back({m.x0 + i * px, m.y0 + j * py, m.x1 + i * px, m.y1 + j * py});
+    const std::size_t array_rects = L.size();
+    // Three distinct 1x1 foreign rects at non-lattice positions inside the extent.
+    L.push_back({2.5, 2.5, 3.5, 3.5});
+    L.push_back({34.0, 15.0, 35.0, 16.0});
+    L.push_back({12.0, 33.0, 13.0, 34.0});
+
+    LatticeInfo info;
+    Hierarchy h = recover_lattice(L, {}, &info);
+    CHECK(info.ok, "foreign: array still recovered despite standalone foreign shapes");
+    CHECK(info.placements == COLS * ROWS && info.tile_members == (int)motif.size(),
+          "foreign: full array recovered, tile unchanged");
+    CHECK(info.residual == 3, "foreign: the 3 foreign rects fall to residual (top cell)");
+    CHECK(info.periodicity_x > 0.9 && info.periodicity_y > 0.9,
+          "foreign: periodicity stays high (foreign is a small fraction)");
+    CHECK(flatten(h).size() == L.size(), "foreign: flatten(H) == G exact");
+    CHECK(h.top.size() == array_rects / motif.size(),
+          "foreign: every array cell placed");
+  }
+
+  // ---- (E) Non-array is rejected by the two-axis periodicity gate -----------
+  // Rectangles of one repeated shape scattered at non-lattice positions: gaps
+  // exist so candidate periods are generated, but the geometry does not translate
+  // onto itself, so periodicity is low on at least one axis and recover_lattice
+  // declines rather than fabricating a spurious array.
+  std::printf("\n[nested] non-array rejected by periodicity gate\n");
+  {
+    std::vector<Rect> L;
+    for (int i = 0; i < 40; ++i) {
+      double x = (double)((i * 17) % 97), y = (double)((i * 31) % 89);
+      L.push_back({x, y, x + 4, y + 4});  // same shape, non-periodic positions
+    }
+    LatticeInfo info;
+    Hierarchy h = recover_lattice(L, {}, &info);
+    CHECK(h.cells.empty() && !info.ok,
+          "non-array: gate declines (no spurious lattice fabricated)");
   }
 
   std::printf("\n%s (%d failure%s)\n", g_failures == 0 ? "ALL PASSED" : "FAILURES",

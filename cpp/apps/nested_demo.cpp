@@ -48,8 +48,9 @@ static void report(const char* label, const Nested& h) {
               h.residual.size(), h.matches_base_flatten ? "YES" : "NO",
               h.explains_g ? "YES" : "NO", h.defect_rects);
   if (h.lattice_prior)
-    std::printf("  (base via lattice prior: seed-grow found nothing on this dense "
-                "array; fundamental-domain tile extracted by anchor-modulo)\n");
+    std::printf("  (base via lattice prior: seed-grow found nothing; fundamental-"
+                "domain tile by anchor-modulo, two-axis periodicity px=%.2f py=%.2f)\n",
+                h.lat_px, h.lat_py);
 }
 
 // Print the synthesized cell tree: each intermediate cell as an array reference

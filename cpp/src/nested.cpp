@@ -434,8 +434,14 @@ Nested recover_nested(const std::vector<Rect>& layout, const RecoverConfig& cfg)
   // pass then stacks into rows/blocks. Layouts the base already handles are left
   // untouched, so existing (synthetic) behaviour is unchanged.
   if (h.base.cells.empty()) {
-    Hierarchy lat = recover_lattice(layout, cfg);
-    if (!lat.cells.empty()) { h.base = std::move(lat); h.lattice_prior = true; }
+    LatticeInfo li;
+    Hierarchy lat = recover_lattice(layout, cfg, &li);
+    if (!lat.cells.empty()) {
+      h.base = std::move(lat);
+      h.lattice_prior = true;
+      h.lat_px = li.periodicity_x;
+      h.lat_py = li.periodicity_y;
+    }
   }
 
   h.flat_leaf_count = h.base.flat_leaf_count;

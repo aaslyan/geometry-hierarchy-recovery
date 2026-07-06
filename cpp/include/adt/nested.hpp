@@ -72,6 +72,7 @@ struct Nested {
 
   int levels = 0;                // nested levels synthesized above the leaves
   bool lattice_prior = false;    // base came from the lattice prior (dense 2D array)
+  double lat_px = 0, lat_py = 0; // two-axis periodicity of the lattice prior (if used)
 
   // Reporting.
   int flat_leaf_count = 0;       // |G|

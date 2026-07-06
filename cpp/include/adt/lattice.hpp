@@ -33,6 +33,8 @@ struct LatticeInfo {
   int tile_members = 0;    // rectangles in one fundamental-domain tile
   int placements = 0;      // fully-occupied lattice cells
   int residual = 0;        // rectangles explained by no tile
+  double periodicity_x = 0, periodicity_y = 0;  // interior-normalized [0,1] per axis
+  bool fast_path = false;  // accepted via the two-axis gate (no combo search)
 };
 
 // Recover a dense array via the lattice prior. Returns a base-style Hierarchy

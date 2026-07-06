@@ -49,6 +49,14 @@ struct RecoverConfig {
   // intact for flattening; this only changes the compressed cost/reporting view.
   int min_array_instances = 4;
 
+  // Lattice-prior (dense-array) recovery. A region is accepted as a 2D array only
+  // if it translates onto itself under BOTH fundamental generators — the §3
+  // necessary condition — with at least this interior-normalized periodicity on
+  // each axis (1.0 = perfect; the slack tolerates a boundary/foreign/defect
+  // fraction). Higher = stricter ("clean array only"); lower = accept an array
+  // with more foreign geometry left in residual.
+  double min_periodicity = 0.75;
+
   // Defect tolerance (companion §6). After clean cells are established, a rescan
   // accepts PARTIAL instances (a missing member or two), recording the gaps as a
   // defect layer. Only leaf members may be missing — a missing sub-cell reference
