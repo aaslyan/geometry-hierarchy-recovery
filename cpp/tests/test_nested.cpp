@@ -14,7 +14,9 @@
 #include <vector>
 
 #include "adt/bench.hpp"
+#include "adt/lattice.hpp"
 #include "adt/nested.hpp"
+#include "adt/recover.hpp"
 
 using namespace adt::hr;
 using adt::Rect;
@@ -142,6 +144,44 @@ int main() {
     // 2-gate or 2-slice coincidence cell alone would NOT satisfy these.
     CHECK(!has_slice(h, 2, gate_pitch) || NG == 2,
           "clean: no spurious 2-gate slice stands in for the real one");
+  }
+
+  // ---- (C) Lattice-prior dense 2D array (the 2D fix) ------------------------
+  // A dense array whose motif ABUTS its cell (a full-width and full-height bar
+  // reach the cell edge, extent == pitch). Radius-based seed-and-grow reaches the
+  // neighbour from any seed; the lattice prior assigns by anchor-modulo and
+  // recovers the tile exactly. This directly exercises recover_lattice.
+  std::printf("\n[nested] lattice-prior dense 2D array\n");
+  {
+    const std::vector<Rect> motif = {
+        {0, 0, 10, 2},   // full-width bottom bar (x1 == pitch)
+        {0, 3, 2, 10},   // full-height left bar (y1 == pitch)
+        {3, 4, 8, 9},    // interior block
+        {4, 2, 9, 3},    // small distinct rect
+    };
+    const int COLS = 6, ROWS = 5;
+    const double px = 10, py = 10;
+    std::vector<Rect> L;
+    for (int i = 0; i < COLS; ++i)
+      for (int j = 0; j < ROWS; ++j)
+        for (const auto& m : motif)
+          L.push_back({m.x0 + i * px, m.y0 + j * py, m.x1 + i * px, m.y1 + j * py});
+
+    LatticeInfo info;
+    Hierarchy h = recover_lattice(L, {}, &info);
+    CHECK(info.ok, "lattice: found a lattice on the dense abutting array");
+    CHECK(std::abs(info.dx - px) < 0.6 && std::abs(info.dy - py) < 0.6,
+          "lattice: recovered dx,dy == pitch");
+    CHECK(info.tile_members == (int)motif.size(), "lattice: tile == one motif");
+    CHECK(info.placements == COLS * ROWS, "lattice: one placement per cell");
+    CHECK(info.residual == 0, "lattice: no residual on a perfect array");
+    CHECK(flatten(h).size() == L.size(), "lattice: flatten(H) reproduces |G| exactly");
+
+    // End-to-end: recover_nested falls back to the lattice prior and nests it.
+    Nested nh = recover_nested(L);
+    CHECK(nh.matches_base_flatten && nh.explains_g && nh.defect_rects == 0,
+          "lattice+nested: flatten(nested) == G exact");
+    CHECK(nh.nested_cost < nh.flat_leaf_count, "lattice+nested: compresses the array");
   }
 
   std::printf("\n%s (%d failure%s)\n", g_failures == 0 ? "ALL PASSED" : "FAILURES",

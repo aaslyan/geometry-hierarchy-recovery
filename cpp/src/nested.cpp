@@ -8,6 +8,8 @@
 #include <utility>
 #include <vector>
 
+#include "adt/lattice.hpp"
+
 namespace adt::hr {
 
 namespace {
@@ -423,6 +425,19 @@ std::string nested_to_json(const Nested& h) {
 Nested recover_nested(const std::vector<Rect>& layout, const RecoverConfig& cfg) {
   Nested h;
   h.base = recover_hierarchy(layout, cfg);
+
+  // Lattice-prior fallback (paper §7.6/§9). Seed-and-extend growth returns nothing
+  // on a dense array whose tile extent exceeds the pitch (it over-covers and the
+  // exact gate reverts). When the base recovers no cells, try the lattice prior:
+  // it extracts the fundamental-domain tile by anchor-modulo partition, which is
+  // immune to extent > pitch, and hands back an exact base hierarchy the nested
+  // pass then stacks into rows/blocks. Layouts the base already handles are left
+  // untouched, so existing (synthetic) behaviour is unchanged.
+  if (h.base.cells.empty()) {
+    Hierarchy lat = recover_lattice(layout, cfg);
+    if (!lat.cells.empty()) { h.base = std::move(lat); h.lattice_prior = true; }
+  }
+
   h.flat_leaf_count = h.base.flat_leaf_count;
   h.base_cost = h.base.hier_cost;
   h.residual = h.base.residual;

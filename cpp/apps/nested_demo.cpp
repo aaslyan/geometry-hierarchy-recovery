@@ -8,6 +8,7 @@
 //
 //   nested_demo               run the synthetic datapath suite
 //   nested_demo <flat.txt>    run on a flattened rectangle dump (e.g. flat_gds.txt)
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -21,6 +22,20 @@
 using namespace adt::hr;
 using adt::Rect;
 
+// Parse a strictly-positive, finite double CLI argument. quantum and grow_radius
+// are scale knobs where 0/negative/NaN/inf silently disable recovery (quantum 0
+// collapses every coordinate), so reject bad values loudly instead of running.
+static double parse_positive(const char* s, const char* name) {
+  char* end = nullptr;
+  double v = std::strtod(s, &end);
+  if (end == s || *end != '\0' || !std::isfinite(v) || v <= 0.0) {
+    std::fprintf(stderr, "error: %s must be a positive finite number (got \"%s\")\n",
+                 name, s);
+    std::exit(2);
+  }
+  return v;
+}
+
 static void report(const char* label, const Nested& h) {
   std::printf("%-30s flat=%d  base=%d (%.2fx)  nested=%d (%.2fx)  "
               "cells=%zu lvls=%d  slice=%d block=%d  top=%zu resid=%zu  "
@@ -32,6 +47,9 @@ static void report(const char* label, const Nested& h) {
               h.cells.size(), h.levels, h.n_slice, h.n_block, h.top.size(),
               h.residual.size(), h.matches_base_flatten ? "YES" : "NO",
               h.explains_g ? "YES" : "NO", h.defect_rects);
+  if (h.lattice_prior)
+    std::printf("  (base via lattice prior: seed-grow found nothing on this dense "
+                "array; fundamental-domain tile extracted by anchor-modulo)\n");
 }
 
 // Print the synthesized cell tree: each intermediate cell as an array reference
@@ -80,8 +98,8 @@ int main(int argc, char** argv) {
     // quantum   — coordinate/shape snap (must resolve real feature sizes);
     // grow_radius — seed-and-extend reach (should span one repeated tile).
     RecoverConfig cfg;
-    if (argc > 2) cfg.quantum = std::atof(argv[2]);
-    if (argc > 3) cfg.grow_radius = std::atof(argv[3]);
+    if (argc > 2) cfg.quantum = parse_positive(argv[2], "quantum");
+    if (argc > 3) cfg.grow_radius = parse_positive(argv[3], "grow_radius");
     std::printf("mixed array/hierarchy extraction — real flattened GDS\n");
     if (!header.empty()) std::printf("%s\n", header.c_str());
     std::printf("flattened: %zu rectangles  (quantum=%.4g grow_radius=%.4g)\n\n",
@@ -93,7 +111,23 @@ int main(int argc, char** argv) {
     std::ofstream js("recovered_nested.json");
     js << nested_to_json(h);
     std::printf("\nwrote recovered_nested.json\n");
-    return h.matches_base_flatten ? 0 : 2;
+
+    // Distinguish "explained the geometry" from "found hierarchy". A broken
+    // reconstruction is an error (3); explaining G but recovering no compressing
+    // structure is a soft failure worth flagging (2) so the demo is not silently
+    // green when a scale knob is off; real structure is success (0).
+    if (!h.matches_base_flatten) {
+      std::fprintf(stderr, "error: nested view does not reproduce base geometry\n");
+      return 3;
+    }
+    if (h.base.cells.empty() || h.nested_cost >= h.flat_leaf_count) {
+      std::fprintf(stderr,
+                   "warning: no repeated structure recovered (cells=%zu, nested cost "
+                   "%d vs %d flat); try adjusting quantum/grow_radius\n",
+                   h.base.cells.size(), h.nested_cost, h.flat_leaf_count);
+      return 2;
+    }
+    return 0;
   }
 
   struct Case { const char* label; int g, r, b; bool mirror; int clutter; };

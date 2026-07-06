@@ -71,6 +71,7 @@ struct Nested {
   std::vector<Rect> residual;    // leaf rectangles explained by no cell
 
   int levels = 0;                // nested levels synthesized above the leaves
+  bool lattice_prior = false;    // base came from the lattice prior (dense 2D array)
 
   // Reporting.
   int flat_leaf_count = 0;       // |G|

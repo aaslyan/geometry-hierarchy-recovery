@@ -38,6 +38,7 @@ add_library(adt
   # Phase 2 — hierarchy recovery
   cpp/src/recover.cpp
   cpp/src/nested.cpp
+  cpp/src/lattice.cpp
   cpp/src/synthetic_hier.cpp
   cpp/src/hr_svg.cpp
   cpp/src/bench.cpp)
