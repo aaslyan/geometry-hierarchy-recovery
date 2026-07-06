@@ -1716,28 +1716,49 @@ The recovered cell is a valid \emph{single-layer} projection of the
 designer's bitcell, not the full multi-layer cell --- \textbf{agreement,
 not accuracy} (§1.3) on real geometry.
 
-Two limits surfaced, both structural rather than incidental. First,
-\textbf{full 2D recovery of the dense array reverts to nothing}: the
-bitcell's own per-layer extent (≈ 4.2 µm diagonal on met1)
-\emph{exceeds} the 3.95 µm vertical row pitch, so no seed-and-extend
-radius separates a mirrored cell from its abutting vertical neighbor ---
-every candidate over-grows, and the exact-multiset gate (§5.4) correctly
-reverts it, leaving zero cells. This is the §7.3/§9 dense-array hardness
-made concrete on silicon: when a tile is packed tighter than its own
-extent, geometry-first growth needs the lattice prior (a super-cell
-placed only at run origins), which the 1D row supplies --- its 6.24 µm
-column pitch does exceed the tile extent --- but the 2D packing does
-not. Second, the \textbf{uniform contact layer (licon) is not recovered
-at all}: its rectangles are all identical squares, so the local
+\textbf{2D dense recovery: the lattice prior.} On the \emph{full} 2D
+bitcell array, radius-based seed-and-extend growth returns nothing ---
+the bitcell's own per-layer extent (≈ 4.2 µm diagonal on met1)
+\emph{exceeds} the 3.95 µm vertical row pitch, so no growth radius
+separates a mirrored cell from its abutting vertical neighbor; every
+candidate over-grows and the exact-multiset gate (§5.4) reverts the
+round to zero cells. The uniform contact layer (licon) fails for a
+second reason: its rectangles are all identical squares, so the local
 geometric shingle (§5.4) is ambiguous --- 1131 contacts collapse to five
-signature groups and no stable tile forms. This is the §4.4 lossiness
-from the other side: the deliberately-asymmetric synthetic gate is the
-easy case; a real field of identical contacts is the adversarial one.
-Metal and poly layers, with their varied per-cell shapes, recover; the
-contact layer does not. The honest reading: on real SKY130 geometry the
-framework recovers and compactly nests a repeated cell \textbf{line-wise
-and exactly} (up to 55× on met1), while 2D dense-array recovery awaits
-the array-node lattice prior driving growth, not just scoring it.
+signature groups --- the §4.4 lossiness from the adversarial side. Both
+failures are answered by letting the lattice \emph{drive} candidate
+generation rather than only score it. \texttt{recover\_lattice} finds a
+translational axis-aligned lattice \texttt{(dx,\ dy)} --- candidate
+periods ranked by \textbf{self-similarity} (does translating by
+\texttt{d} map shapes onto identical shapes), which rejects the mirror
+pitch and the intra-tile spacings --- extracts the fundamental-domain
+tile by \textbf{anchor-modulo} partition (each rectangle is assigned to
+the cell its min-corner lands in, so a tile that spills past its own
+cell is still separated, immune to extent \textgreater{} pitch), and
+tiles it with \textbf{count-aware} matching (real flattened geometry has
+coincident rectangles: SRAM bitlines and wordlines shared between
+abutting cells). Wired as a fallback when the shingle channel finds
+nothing, it recovers both stress layers: the met1 crop becomes a
+\textbf{5 × 5 array of a 128-rectangle tile} and the licon crop a 5 × 5
+array of a 156-rectangle tile, each nested
+\texttt{gate\ →\ slice\ →\ block} with \texttt{flatten(H)\ =\ G} exact
+--- where seed-and-grow recovered nothing.
+
+Two honest caveats remain on the 2D result. Under the mirror the
+translational fundamental domain is a \textbf{2 × 2 super-cell of
+bitcells}, not the single bitcell in four D4 orientations (factoring it
+into one cell under D4 is future work); and the shared-rail coincident
+geometry that cannot tile cleanly falls to residual (≈ 40 \% of each
+crop), so the 2D compression is a modest \textasciitilde2.3× --- exact
+and structurally correct, but far below the line-wise 55×. The division
+of labor is the one the paper is built on, now extended: the shingle
+channel proposes discriminative motifs and geometry proves them
+(met1/li1/poly, line-wise, up to 55×); where the shingle channel is
+defeated --- a tile packed tighter than its extent, or a field of
+identical squares --- the \textbf{lattice} proposes instead, and the
+same exact-multiset gate proves. On real SKY130 geometry the framework
+now recovers a repeated cell both line-wise and as a dense 2D array,
+exactly in both cases.
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
@@ -1841,16 +1862,23 @@ recursing on the mixed representation
 exact-multiset gate. On the synthetic datapaths it lifts the
 placement-list \textasciitilde3.3--3.5× to a nested \textbf{9.5--14×}
 (\texttt{gate\ →\ slice\ →\ block\ →\ top}, exact), and on a real SKY130
-SRAM row to \textbf{55×} (§7.6). It is still \textbf{not full
-source-like extraction}. Two simplifications remain: nested cells are
-placed at orientation 0 with mirroring baked into distinct cell bodies
-(so a mirrored row is a second \texttt{slice} cell rather than one cell
-reused under D4), and --- the load-bearing gap --- 2D dense arrays
-remain blocked by the tile-extent-exceeds-pitch limit of §7.6, because
-growth is still seed-and-extend and only the \emph{scoring}, not the
-\emph{candidate generation}, uses the lattice. Closing it means driving
-growth from the array-node prior (place a super-cell at run origins), so
-a tile packed tighter than its own extent is still separable.
+SRAM row to \textbf{55×} (§7.6). The tile-extent-exceeds-pitch failure
+that once blocked 2D dense arrays is now handled by the \textbf{lattice
+prior} (§7.6): when seed-and-extend growth recovers nothing,
+\texttt{recover\_lattice} drives candidate generation from the period
+instead --- a translational lattice found by self-similarity, the
+fundamental-domain tile extracted by anchor-modulo, tiled with
+count-aware matching --- and the SRAM's 2D met1 and licon crops recover
+exactly as nested \texttt{gate\ →\ slice\ →\ block} arrays. It is still
+\textbf{not full source-like extraction}. Two simplifications remain:
+nested cells are placed at orientation 0 with mirroring baked into
+distinct cell bodies (so a mirrored row is a second \texttt{slice} cell
+rather than one cell reused under D4), and the recovered 2D fundamental
+domain is the translational \textbf{2 × 2 super-cell} (§7.6) rather than
+a single bitcell factored into D4 orientations --- which, with the
+shared-rail coincident geometry the prior cannot tile (≈ 40 \%
+residual), holds the 2D compression to a modest \textasciitilde2.3× even
+though the recovery is exact.
 
 \textbf{Other scoped-out items.} Multi-layer / multi-class geometry,
 holes and overlapping polygons, oblique (non-orthogonal) lattices, and
@@ -1896,22 +1924,23 @@ hidden, and lowering the placement-list compression to the honest range
 was the \emph{right} outcome. The framework is honest about
 non-uniqueness throughout: agreement, not accuracy.
 
-\textbf{Future work}, in rough priority order: (1) extend the
-real-SKY130 evaluation (§7.6) from a 1D bitcell row to the full 2D dense
-array and to an ORFS erasure crop --- the 2D case is blocked until the
-array-node lattice prior \emph{drives} growth (super-cell placed at run
-origins) rather than only scoring it; (2) \textbf{complete the nested
-extractor} --- the §7.6 prototype recovers \texttt{slice}/\texttt{block}
-cells and nests exactly on synthetic and real rows, but still needs
-D4-aware single-cell reuse for mirrored rows (rather than a second cell)
-and multi-layer tiles; (3) \textbf{tiling + parallelism} and streaming
-toward billion-polygon layouts; (4) \textbf{fractured-polygon
-verification} in the recovery path via reused canonicalization; (5) the
-\textbf{multi-serialization} run/substring generator of §4.2 and an
-occupancy-vs-edge ablation; (6) ILP/global selection to replace greedy;
-and (7) multi-layer support. Papers on either algorithm should follow
-real, benchmarked output --- this draft is the working record toward
-that, not a finished result.
+\textbf{Future work}, in rough priority order: (1) push the real-SKY130
+evaluation further (§7.6) --- the lattice prior now recovers the 2D
+array as a translational \textbf{2 × 2 super-cell}, so the next steps
+are factoring that super-cell into a single bitcell under D4, reducing
+the shared-rail residual (currently ≈ 40 \%), and running an ORFS
+standard-cell crop plus the erasure harness; (2) \textbf{complete the
+nested extractor} --- the §7.6 prototype recovers
+\texttt{slice}/\texttt{block} cells and nests exactly on synthetic and
+real layouts, but still needs D4-aware single-cell reuse for mirrored
+rows (rather than a second cell) and multi-layer tiles; (3)
+\textbf{tiling + parallelism} and streaming toward billion-polygon
+layouts; (4) \textbf{fractured-polygon verification} in the recovery
+path via reused canonicalization; (5) the \textbf{multi-serialization}
+run/substring generator of §4.2 and an occupancy-vs-edge ablation; (6)
+ILP/global selection to replace greedy; and (7) multi-layer support.
+Papers on either algorithm should follow real, benchmarked output ---
+this draft is the working record toward that, not a finished result.
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
