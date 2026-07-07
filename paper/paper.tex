@@ -1760,6 +1760,70 @@ same exact-multiset gate proves. On real SKY130 geometry the framework
 now recovers a repeated cell both line-wise and as a dense 2D array,
 exactly in both cases.
 
+\subsection{7.7 Non-uniqueness,
+demonstrated}\label{non-uniqueness-demonstrated}
+
+Every ``agreement, not accuracy'' claim in this paper rests on one fact:
+a flat set of rectangles admits \emph{many} geometrically valid
+hierarchies --- different cell decompositions that flatten back to
+exactly the same geometry. Rather than assert it,
+\texttt{nonuniqueness\_demo} (a registered regression test) exhibits the
+family and verifies every member against G.
+
+Take one row of twelve identical unit motifs (36 rectangles). Grouping
+the unit in ones, twos, threes, \ldots, or nesting a small cell inside a
+larger one, gives eight distinct hierarchies --- every one
+\texttt{flatten(H)\ =\ G} exact:
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}llll@{}}
+\toprule\noalign{}
+Decomposition & Levels & Instances & Cost \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+unit ×12 (flat) & 1 & 12 & 15 \\
+2-unit cell ×6 & 1 & 6 & \textbf{12} \\
+3-unit cell ×4 & 1 & 4 & 13 \\
+4-unit cell ×3 & 1 & 3 & 15 \\
+6-unit cell ×2 & 1 & 2 & 20 \\
+12-unit cell ×1 & 1 & 1 & 37 \\
+(2-unit) → ×3, ×2 (nested) & 2 & 2 & \textbf{11} \\
+(3-unit) → ×2, ×2 (nested) & 2 & 2 & 13 \\
+\end{longtable}
+}
+
+The cost ranges more than 3× (11--37) across decompositions that are all
+exactly correct. The minimum-cost member (here the two-level nesting) is
+a choice of \emph{objective}, not a fact about the geometry.
+
+The same non-uniqueness shows up in the recoverer's own output: on one
+datapath (246 rectangles) the three recovery paths return three
+structurally different, all-exact hierarchies:
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}llllll@{}}
+\toprule\noalign{}
+Recovery path & Cells & Levels & Instances & Residual & Cost \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+flat placement list (MDL) & 1 & 1 & 59 & 10 & 73 \\
+nested \texttt{gate→slice→block→top} & 8 & 4 & 4 & 10 & \textbf{26} \\
+lattice super-tile (array) & 1 & 1 & 12 & 150 & 170 \\
+\end{longtable}
+}
+
+A flat gate list, a deep four-level nesting, and a single arrayed
+super-tile with the block gutters left as residual. A lower cost is not
+``more correct''; all three reproduce G exactly. This is §2.4 made
+operational: \textbf{which} hierarchy is returned is governed by the
+stated objective and knobs (\texttt{max\_levels}, \texttt{selection},
+tie-breaks), so where a source hierarchy exists we report agreement, not
+accuracy {[}HR, §1.3{]}.
+
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
 \section{8. Related Work}\label{related-work}
@@ -1821,13 +1885,14 @@ is the central honesty point {[}HR, §1.3, §2.8{]}. A flat layout admits
 many geometrically valid hierarchies; both the greedy selection
 (order-dependent) and the recursion mean the output is one member of a
 family, not a canonical answer. We saw it live in §7.2 (unconstrained
-recovery picks a different decomposition from the array view) and §7.5
-(191 of 192 gates recovered, the 192nd falling to residual). Where a
-source hierarchy is known we therefore report \textbf{agreement, not
-accuracy}. The knobs (\texttt{max\_levels}, \texttt{min\_cell\_members},
-\texttt{cost\_instance}, \texttt{gain\_min}, \ldots) select \emph{which}
-valid hierarchy is returned; they are non-uniqueness controls, not
-accuracy dials.
+recovery picks a different decomposition from the array view), §7.5 (191
+of 192 gates recovered, the 192nd falling to residual), and §7.7 (the
+whole family of exact hierarchies for one layout, exhibited and
+verified). Where a source hierarchy is known we therefore report
+\textbf{agreement, not accuracy}. The knobs (\texttt{max\_levels},
+\texttt{min\_cell\_members}, \texttt{cost\_instance},
+\texttt{gain\_min}, \ldots) select \emph{which} valid hierarchy is
+returned; they are non-uniqueness controls, not accuracy dials.
 
 \textbf{Greedy selection is non-optimal.} Selection is weighted
 set-packing (NP-hard in general); the greedy heuristic has no optimality

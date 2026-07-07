@@ -521,6 +521,35 @@ The recovered cell is a valid *single-layer* projection of the designer's bitcel
 
 Two honest caveats remain on the 2D result. Under the mirror the translational fundamental domain is a **2 × 2 super-cell of bitcells**, not the single bitcell in four D4 orientations (factoring it into one cell under D4 is future work); and the shared-rail coincident geometry that cannot tile cleanly falls to residual (≈ 40 % of each crop), so the 2D compression is a modest ~2.3× — exact and structurally correct, but far below the line-wise 55×. The division of labor is the one the paper is built on, now extended: the shingle channel proposes discriminative motifs and geometry proves them (met1/li1/poly, line-wise, up to 55×); where the shingle channel is defeated — a tile packed tighter than its extent, or a field of identical squares — the **lattice** proposes instead, and the same exact-multiset gate proves. On real SKY130 geometry the framework now recovers a repeated cell both line-wise and as a dense 2D array, exactly in both cases.
 
+### 7.7 Non-uniqueness, demonstrated
+
+Every "agreement, not accuracy" claim in this paper rests on one fact: a flat set of rectangles admits *many* geometrically valid hierarchies — different cell decompositions that flatten back to exactly the same geometry. Rather than assert it, `nonuniqueness_demo` (a registered regression test) exhibits the family and verifies every member against G.
+
+Take one row of twelve identical unit motifs (36 rectangles). Grouping the unit in ones, twos, threes, …, or nesting a small cell inside a larger one, gives eight distinct hierarchies — every one `flatten(H) = G` exact:
+
+| Decomposition | Levels | Instances | Cost |
+|---|---|---|---|
+| unit ×12 (flat) | 1 | 12 | 15 |
+| 2-unit cell ×6 | 1 | 6 | **12** |
+| 3-unit cell ×4 | 1 | 4 | 13 |
+| 4-unit cell ×3 | 1 | 3 | 15 |
+| 6-unit cell ×2 | 1 | 2 | 20 |
+| 12-unit cell ×1 | 1 | 1 | 37 |
+| (2-unit) → ×3, ×2 (nested) | 2 | 2 | **11** |
+| (3-unit) → ×2, ×2 (nested) | 2 | 2 | 13 |
+
+The cost ranges more than 3× (11–37) across decompositions that are all exactly correct. The minimum-cost member (here the two-level nesting) is a choice of *objective*, not a fact about the geometry.
+
+The same non-uniqueness shows up in the recoverer's own output: on one datapath (246 rectangles) the three recovery paths return three structurally different, all-exact hierarchies:
+
+| Recovery path | Cells | Levels | Instances | Residual | Cost |
+|---|---|---|---|---|---|
+| flat placement list (MDL) | 1 | 1 | 59 | 10 | 73 |
+| nested `gate→slice→block→top` | 8 | 4 | 4 | 10 | **26** |
+| lattice super-tile (array) | 1 | 1 | 12 | 150 | 170 |
+
+A flat gate list, a deep four-level nesting, and a single arrayed super-tile with the block gutters left as residual. A lower cost is not "more correct"; all three reproduce G exactly. This is §2.4 made operational: **which** hierarchy is returned is governed by the stated objective and knobs (`max_levels`, `selection`, tie-breaks), so where a source hierarchy exists we report agreement, not accuracy [HR, §1.3].
+
 ---
 
 ## 8. Related Work
@@ -541,7 +570,7 @@ The distinguishing stance of this work is the combination: **partial** structure
 
 We follow the design documents in being explicit about what the framework does *not* claim.
 
-**Recovered hierarchy is one of many valid decompositions.** This is the central honesty point [HR, §1.3, §2.8]. A flat layout admits many geometrically valid hierarchies; both the greedy selection (order-dependent) and the recursion mean the output is one member of a family, not a canonical answer. We saw it live in §7.2 (unconstrained recovery picks a different decomposition from the array view) and §7.5 (191 of 192 gates recovered, the 192nd falling to residual). Where a source hierarchy is known we therefore report **agreement, not accuracy**. The knobs (`max_levels`, `min_cell_members`, `cost_instance`, `gain_min`, …) select *which* valid hierarchy is returned; they are non-uniqueness controls, not accuracy dials.
+**Recovered hierarchy is one of many valid decompositions.** This is the central honesty point [HR, §1.3, §2.8]. A flat layout admits many geometrically valid hierarchies; both the greedy selection (order-dependent) and the recursion mean the output is one member of a family, not a canonical answer. We saw it live in §7.2 (unconstrained recovery picks a different decomposition from the array view), §7.5 (191 of 192 gates recovered, the 192nd falling to residual), and §7.7 (the whole family of exact hierarchies for one layout, exhibited and verified). Where a source hierarchy is known we therefore report **agreement, not accuracy**. The knobs (`max_levels`, `min_cell_members`, `cost_instance`, `gain_min`, …) select *which* valid hierarchy is returned; they are non-uniqueness controls, not accuracy dials.
 
 **Greedy selection is non-optimal.** Selection is weighted set-packing (NP-hard in general); the greedy heuristic has no optimality guarantee. ILP for small/medium candidate counts, and a principled global objective, are explicit future work [HR, §2.7].
 
