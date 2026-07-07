@@ -29,6 +29,10 @@ struct RecoverConfig {
                              // purpose — seed-and-extend growth completes the body
   Selection selection = Selection::MDLGain;  // promotion criterion (see above)
   int dropoff_max_size = 12; // largest motif size probed when finding the cliff
+  bool size_blind = false;   // ablation: drop physical size (w,h) from motif signatures,
+                             // keeping only symbol+position. Off by default; turning it on
+                             // makes the string a pure symbol stream and shows what size buys
+                             // (motifs that differ only in size collapse together — §5.1).
   double grow_radius = 60.0; // seed-and-extend search radius around a motif
   int max_cell_members = 256;// cap on cell body size — bounds growth so a perfectly
                              // periodic region can't grow an unbounded cell (perf)
@@ -97,10 +101,14 @@ struct DropoffPoint {
   int size = 0;                // motif size L (number of primitives)
   int distinct_motifs = 0;     // R(L): distinct motifs of size L recurring ≥ min_instances
   int total_occurrences = 0;   // F(L): summed occurrences of those motifs
+  double support = 0;          // F(L)/R(L): mean occurrences per surviving motif — the
+                               // "grow, grow, DROP" signal (high while one motif explains
+                               // ~all instances; falls off a cliff once it fragments)
 };
 struct DropoffCurve {
   std::vector<DropoffPoint> points;  // by increasing size L
-  int elbow_size = 0;                // L at the top of the sharpest drop (cell scale)
+  int elbow_size = 0;                // L at the top of the sharpest support drop (cell scale)
+  double drop_ratio = 0;             // support[elbow] / support[elbow+1] (cliff sharpness)
 };
 DropoffCurve dropoff_curve(const std::vector<Rect>& layout,
                            const RecoverConfig& cfg = {});

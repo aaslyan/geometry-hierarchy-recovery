@@ -92,3 +92,7 @@ add_test(NAME nested COMMAND test_nested)
 
 # nonuniqueness_demo self-checks (every decomposition must flatten to G exactly).
 add_test(NAME nonuniqueness COMMAND nonuniqueness_demo)
+
+# dropoff_demo self-checks (support cliff finds the true cell scale; size separates
+# motifs that a symbol-only view would merge).
+add_test(NAME dropoff COMMAND dropoff_demo)

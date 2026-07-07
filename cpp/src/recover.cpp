@@ -111,7 +111,7 @@ void normalize(std::vector<Member>& ms) {
   for (auto& m : ms) { m.dx -= mnx; m.dy -= mny; }
 }
 
-std::string signature(std::vector<Member> ms, double q) {
+std::string signature(std::vector<Member> ms, double q, bool size_blind = false) {
   std::sort(ms.begin(), ms.end(), [&](const Member& a, const Member& b) {
     return std::make_tuple(a.cell, a.orient, qbin(a.dx, q), qbin(a.dy, q),
                            qbin(a.w, q), qbin(a.h, q)) <
@@ -119,22 +119,25 @@ std::string signature(std::vector<Member> ms, double q) {
                            qbin(b.w, q), qbin(b.h, q));
   });
   std::string s;
-  for (const auto& m : ms)
+  for (const auto& m : ms) {
     s += std::to_string(m.cell) + "." + std::to_string(m.orient) + ":" +
-         std::to_string(qbin(m.dx, q)) + "," + std::to_string(qbin(m.dy, q)) + "|" +
-         std::to_string(qbin(m.w, q)) + "x" + std::to_string(qbin(m.h, q)) + ";";
+         std::to_string(qbin(m.dx, q)) + "," + std::to_string(qbin(m.dy, q));
+    if (!size_blind)  // the physical size is what keeps the string faithful to geometry
+      s += "|" + std::to_string(qbin(m.w, q)) + "x" + std::to_string(qbin(m.h, q));
+    s += ";";
+  }
   return s;
 }
 
 // D4-invariant signature: the lexicographically smallest signature over all 8
 // orientations of the normalized member set. Two neighborhoods that are the same
 // motif up to translation + reflection/rotation hash identically.
-std::string canonical_sig(const std::vector<Member>& ms, double q) {
+std::string canonical_sig(const std::vector<Member>& ms, double q, bool size_blind = false) {
   std::string best;
   for (int g = 0; g < 8; ++g) {
     std::vector<Member> t = transform_body(ms, g);
     normalize(t);
-    std::string s = signature(t, q);
+    std::string s = signature(t, q, size_blind);
     if (g == 0 || s < best) best = s;
   }
   return best;
@@ -344,25 +347,30 @@ DropoffCurve compute_curve(const std::vector<Prim>& prims, const RTree& tree,
       for (int j : shingle_neighbors(i, prims, tree, L - 1))
         sh.push_back(member_of(prims[j], ax(prims[i]), ay(prims[i])));
       if ((int)sh.size() < L) continue;  // not enough neighbors at this size
-      counts[canonical_sig(sh, cfg.quantum)]++;
+      counts[canonical_sig(sh, cfg.quantum, cfg.size_blind)]++;
     }
     int R = 0, F = 0;
     for (const auto& kv : counts)
       if (kv.second >= cfg.min_instances) { ++R; F += kv.second; }
-    curve.points.push_back({L, R, F});
+    curve.points.push_back({L, R, F, R ? (double)F / R : 0.0});
     if (F == 0) break;  // no motif of this size recurs — past the cliff
   }
-  // The cell scale is the size just before the distinct-motif count R(L) jumps:
-  // up to the cell, all instances share one canonical neighborhood (R small);
-  // past it, neighborhoods reach into non-repeating surroundings and fragment
-  // into many distinct motifs (R rises sharply). The elbow is the L at the top of
-  // that rise — "grow until the motif suddenly stops being the same everywhere."
-  // (For a dense lattice this signal is weak — sub-units repeat too — which is
-  // exactly why §3 is a scale prior, not a universal decider; MDL wins there.)
-  int best_rise = 0;
+  // The cell scale is the size at the TOP of the sharpest drop in SUPPORT
+  // (F/R = mean occurrences per surviving motif) — the literal "grow, grow,
+  // DROP." Up to the cell, one canonical neighborhood explains nearly every
+  // instance, so support is high; once the neighborhood grows past the cell it
+  // reaches into non-repeating surroundings and fragments into many motifs, so
+  // support falls off a cliff. We use the largest RELATIVE drop so the signal is
+  // scale-free. (For a dense lattice this signal is weak — sub-units repeat too —
+  // which is exactly why §3 is a scale prior, not a universal decider; MDL wins.)
+  double best_drop = 1.0;
   for (std::size_t i = 0; i + 1 < curve.points.size(); ++i) {
-    int rise = curve.points[i + 1].distinct_motifs - curve.points[i].distinct_motifs;
-    if (rise > best_rise) { best_rise = rise; curve.elbow_size = curve.points[i].size; }
+    double a = curve.points[i].support, b = curve.points[i + 1].support;
+    if (b > 0 && a / b > best_drop) {
+      best_drop = a / b;
+      curve.elbow_size = curve.points[i].size;
+      curve.drop_ratio = a / b;
+    }
   }
   if (curve.elbow_size == 0 && !curve.points.empty())
     curve.elbow_size = curve.points.front().size;
@@ -390,7 +398,7 @@ std::vector<Prim> round(const std::vector<Prim>& prims, const RecoverConfig& cfg
     std::vector<Member> sh{member_of(prims[i], ax(prims[i]), ay(prims[i]))};
     for (int j : shingle_neighbors(i, prims, tree, cfg.neighborhood_k))
       sh.push_back(member_of(prims[j], ax(prims[i]), ay(prims[i])));
-    groups[canonical_sig(sh, cfg.quantum)].push_back(i);
+    groups[canonical_sig(sh, cfg.quantum, cfg.size_blind)].push_back(i);
   }
 
   auto t1 = clk();
