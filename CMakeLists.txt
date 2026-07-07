@@ -60,6 +60,9 @@ target_link_libraries(erasure_demo PRIVATE adt)
 add_executable(nested_demo cpp/apps/nested_demo.cpp)
 target_link_libraries(nested_demo PRIVATE adt)
 
+add_executable(nonuniqueness_demo cpp/apps/nonuniqueness_demo.cpp)
+target_link_libraries(nonuniqueness_demo PRIVATE adt)
+
 add_executable(gds_recover cpp/apps/gds_recover.cpp)
 target_link_libraries(gds_recover PRIVATE adt)
 
@@ -86,3 +89,6 @@ add_test(NAME bench COMMAND test_bench)
 add_executable(test_nested cpp/tests/test_nested.cpp)
 target_link_libraries(test_nested PRIVATE adt)
 add_test(NAME nested COMMAND test_nested)
+
+# nonuniqueness_demo self-checks (every decomposition must flatten to G exactly).
+add_test(NAME nonuniqueness COMMAND nonuniqueness_demo)
