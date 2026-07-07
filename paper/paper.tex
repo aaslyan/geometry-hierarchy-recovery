@@ -606,26 +606,63 @@ stop agreeing and the number of surviving repeats \textbf{falls off a
 cliff.} In words: grow the motif until the repeat suddenly stops; the
 size at the cliff is the cell scale.
 
-Made quantitative over candidate motif length \texttt{L} {[}HR, §3{]}:
+Made quantitative over candidate motif length \texttt{L}, the signal is
+the \textbf{support} --- the mean number of surviving copies per
+distinct motif {[}HR, §3{]}:
 
 \begin{verbatim}
-R(L) = number of distinct repeated motifs of length ≥ L
-F(L) = total occurrence count summed over those motifs
-C(L) = total MDL compression gain (§5.4) summed over those motifs
+R(L)       = number of distinct motifs of size L that recur (≥ min copies)
+F(L)       = total occurrences summed over those motifs
+support(L) = F(L) / R(L)   — mean copies per surviving motif
 \end{verbatim}
 
-The expected shape is many short repeats, progressively fewer at longer
-lengths, and a sharp knee at the layout's real cell scale --- as
-\texttt{L} climbs, \texttt{F} holds and then drops, while \texttt{R}
-fragments upward as the growing neighborhood dissolves into
-non-repeating surroundings. Both are the same cliff seen from two sides.
-This is a \textbf{scale prior}, not a decision procedure: it narrows
-\emph{where to look} for the cell boundary; it does not by itself
-certify a cell. Which candidates actually become cells is decided by
-geometric verification and compression gain (§5.4). We implement the
-curve as a first-class, inspectable analysis and expose
-promotion-at-the-drop-off as a selectable criterion, with MDL gain the
-default (§5.4).
+\texttt{support(L)} is the clean ``grow, grow, \emph{drop}'' curve.
+While the growing neighborhood is still inside the cell, one canonical
+motif explains nearly every instance, so \texttt{R} is small and support
+is high; the moment it grows past the cell into per-instance clutter it
+fragments into many motifs (\texttt{R} jumps while \texttt{F} holds), so
+support \textbf{falls off a cliff.} The cell scale is the size at the
+top of the sharpest \emph{relative} support drop (scale-free). On the
+drop-off demo (\texttt{dropoff\_demo}, a registered regression test) the
+cliff lands exactly on ground truth:
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}llll@{}}
+\toprule\noalign{}
+Layout & Detected cell scale & Truth & Support drop \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+nested motif (scattered) & 2 & 2 & \textbf{8.0×} \\
+defective motif (scattered) & 4 & 4 & 3.6× \\
+dense datapath array & 4 & 4 & 2.0× \\
+\end{longtable}
+}
+
+The sharp cliff on the scattered motifs and the shallow one on the dense
+array are the honest boundary of the method: this is a \textbf{scale
+prior}, not a decision procedure. On a dense lattice sub-units repeat
+too, so the drop is weak --- exactly why array detection instead reads
+the \emph{period} (§3.1) and hierarchy relies on geometric verification
+and MDL gain to \emph{certify} which candidates become cells (§5.4). The
+drop-off narrows \emph{where to look}; it does not by itself certify a
+cell. We implement the curve as a first-class, inspectable analysis and
+expose promotion-at-the-drop-off as a selectable criterion, with MDL
+gain the default (§5.4).
+
+The drop-off is only as faithful as the string it reads, and
+\textbf{physical size is what keeps it faithful.} Each motif token
+carries its rectangle's size, not just a symbol. Strip the size (a
+symbol-only ablation) and two motifs with the same \emph{arrangement}
+but a differently-sized rectangle collapse into one: on a controlled
+layout of four \texttt{A} motifs and four \texttt{B} motifs (identical
+arrangement, \texttt{B}'s second rectangle wider), the size-aware
+signature keeps them apart (\texttt{R\ =\ 2}) while the size-blind one
+merges them (\texttt{R\ =\ 1}, support inflated 2×). This is the §5.1
+edge-collision bug class turned into a positive check --- symbol tells
+you \emph{what pattern}, size tells you \emph{which cell}, and the
+drop-off needs both.
 
 \subsection{3.4 Why ``necessary, not sufficient,'' and where geometry
 comes
@@ -972,9 +1009,10 @@ instances (the cliff), and is rtree-local and size-capped
 an unbounded body. Because clutter is not present at a consistent offset
 around every instance, it cannot attach --- this is what keeps clutter
 out of cell bodies {[}HR, §2.4{]}. The \texttt{dropoff\_curve} analysis
-(\texttt{R(L)}, \texttt{F(L)}) exposes the same signal for inspection,
-and \texttt{Selection::DropOff} promotes motifs at the drop-off scale as
-an alternative to gain; consistent with §3.3's framing as a \emph{scale
+(\texttt{R(L)}, \texttt{F(L)}, and their ratio \texttt{support\ =\ F/R}
+--- §3.3) exposes the same signal for inspection, and
+\texttt{Selection::DropOff} promotes motifs at the drop-off scale as an
+alternative to gain; consistent with §3.3's framing as a \emph{scale
 prior}, the drop-off is a clean signal for \textbf{isolated} motifs
 surrounded by non-repeating content --- it recovers the 2-rectangle
 nested motif and the 4-rectangle defective motif exactly --- but weakens
